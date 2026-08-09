@@ -15,6 +15,16 @@ import {
 } from 'react-native';
 
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as Notifications from 'expo-notifications';
+
+// Configure how notifications appear when app is open
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 // NATIVE EXPO APIS FOR SYSTEM BACKUPS
 import * as Clipboard from 'expo-clipboard';
@@ -119,7 +129,42 @@ export default function App() {
     }
   };
 
+  // --- NOTIFICATION ENGINE ---
+  const requestNotificationPermissions = async () => {
+    if (Platform.OS !== 'web') {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+    }
+  };
+
+  const scheduleTaskNotification = async (taskTitle, targetTimeMs, tagList = []) => {
+    if (Platform.OS === 'web') return;
+    try {
+      const triggerSeconds = Math.max(1, Math.round((targetTimeMs - Date.now()) / 1000));
+      const lineText = tagList.length > 0 ? `[${tagList.join(', ')} Line]` : '[Tube Tasks]';
+      
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `🚇 Departure Active: ${taskTitle}`,
+          body: `Service ${lineText} is now due and ready on your route schedule!`,
+          sound: true,
+          data: { taskTitle },
+        },
+        trigger: {
+          seconds: triggerSeconds,
+        },
+      });
+    } catch (e) {
+      console.log('Notification scheduling error:', e);
+    }
+  };
+
   useEffect(() => {
+    requestNotificationPermissions();
     const timer = setInterval(() => setCurrentTime(Date.now()), 60000);
     return () => clearInterval(timer);
   }, []);
@@ -283,6 +328,7 @@ export default function App() {
     if (editingTaskId) {
       setTasks(prev => prev.map(t => {
         if (t.id === editingTaskId) {
+          scheduleTaskNotification(inputText, dueDate, selectedTags);
           return { 
             ...t, title: inputText, isReusable, isRoutine, period: periodDays, 
             tags: selectedTags, dueDate, hasTime, timeText: timeInput 
@@ -297,6 +343,7 @@ export default function App() {
         logs: [{ action: 'created', date: new Date().toISOString() }]
       };
       setTasks([...tasks, newTask]);
+      scheduleTaskNotification(inputText, dueDate, selectedTags);
 
       if (isReusable) {
         const exists = reusableTasks.find(t => t.title.toLowerCase() === inputText.toLowerCase());
@@ -343,6 +390,7 @@ export default function App() {
         if (t.isRoutine) {
           const nextDue = new Date(t.dueDate);
           nextDue.setDate(nextDue.getDate() + t.period);
+          scheduleTaskNotification(t.title, nextDue.getTime(), t.tags);
           return { ...t, status: 'pending', dueDate: nextDue.getTime(), postponeCount: 0, logs: newLogs };
         }
         return { ...t, status: 'completed', postponeCount: 0, logs: newLogs };
@@ -358,6 +406,7 @@ export default function App() {
         const newLogs = [...t.logs, { action: 'postponed', date: new Date().toISOString() }];
         const nextDue = new Date();
         nextDue.setDate(nextDue.getDate() + smartDelayDays); 
+        scheduleTaskNotification(t.title, nextDue.getTime(), t.tags);
         
         if (newCount >= 3 && t.isRoutine) {
           setPredictiveInsight(`"${t.title}" delayed often. System suggests +${smartDelayDays} days based on habit history.`);
