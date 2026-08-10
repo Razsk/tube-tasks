@@ -145,13 +145,15 @@ export default function App() {
   const scheduleTaskNotification = async (taskTitle, targetTimeMs, tagList = []) => {
     if (Platform.OS === 'web') return;
     try {
-      const triggerSeconds = Math.max(1, Math.round((targetTimeMs - Date.now()) / 1000));
+      // Trigger notification 1 hour (3,600,000 ms) before deadline
+      const notificationTimeMs = targetTimeMs - (60 * 60 * 1000);
+      const triggerSeconds = Math.max(1, Math.round((notificationTimeMs - Date.now()) / 1000));
       const lineText = tagList.length > 0 ? `[${tagList.join(', ')} Line]` : '[Tube Tasks]';
       
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: `🚇 Departure Active: ${taskTitle}`,
-          body: `Service ${lineText} is now due and ready on your route schedule!`,
+          title: `🚇 Upcoming Service: ${taskTitle}`,
+          body: `Service ${lineText} is scheduled in 1 hour!`,
           sound: true,
           data: { taskTitle },
         },
@@ -455,14 +457,29 @@ export default function App() {
 
   // --- FILTERING ---
   const activeTasks = tasks.filter(t => t.id.startsWith('hist') === false);
+  const todayDateStr = new Date().toDateString();
   
-  const mainRouteTasks = activeTasks.filter(t => 
-    (t.status === 'pending' && t.dueDate <= currentTime) || (t.status === 'completed' && new Date(t.dueDate).toDateString() === new Date().toDateString())
-  ).sort((a, b) => a.dueDate - b.dueDate);
+  const mainRouteTasks = activeTasks.filter(t => {
+    if (t.status === 'completed') {
+      return new Date(t.dueDate).toDateString() === todayDateStr;
+    }
+    if (t.status === 'pending') {
+      const taskDateStr = new Date(t.dueDate).toDateString();
+      // Include past due tasks AND all tasks scheduled for today
+      return t.dueDate <= currentTime || taskDateStr === todayDateStr;
+    }
+    return false;
+  }).sort((a, b) => a.dueDate - b.dueDate);
 
-  let futureTripsTasks = activeTasks.filter(t => 
-    (t.status === 'pending' && t.dueDate > currentTime) || t.status === 'postponed'
-  ).sort((a, b) => a.dueDate - b.dueDate);
+  let futureTripsTasks = activeTasks.filter(t => {
+    if (t.status === 'postponed') return true;
+    if (t.status === 'pending') {
+      const taskDateStr = new Date(t.dueDate).toDateString();
+      // Only include tasks scheduled for future dates (after today)
+      return t.dueDate > currentTime && taskDateStr !== todayDateStr;
+    }
+    return false;
+  }).sort((a, b) => a.dueDate - b.dueDate);
 
   if (futureFilterLine) {
     futureTripsTasks = futureTripsTasks.filter(t => t.tags.includes(futureFilterLine));
