@@ -16,6 +16,7 @@ import {
 
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Configure how notifications appear when app is open
 Notifications.setNotificationHandler({
@@ -162,6 +163,41 @@ export default function App() {
       console.log('Notification scheduling error:', e);
     }
   };
+
+  const STORAGE_KEY_TASKS = '@tubetasks_tasks_v1';
+  const STORAGE_KEY_REUSABLE = '@tubetasks_reusable_v1';
+  const [isLoadedFromStorage, setIsLoadedFromStorage] = useState(false);
+
+  // Load state on startup
+  useEffect(() => {
+    const loadState = async () => {
+      try {
+        const savedTasks = await AsyncStorage.getItem(STORAGE_KEY_TASKS);
+        const savedReusable = await AsyncStorage.getItem(STORAGE_KEY_REUSABLE);
+        if (savedTasks) setTasks(JSON.parse(savedTasks));
+        if (savedReusable) setReusableTasks(JSON.parse(savedReusable));
+      } catch (e) {
+        console.log('Failed to load storage:', e);
+      } finally {
+        setIsLoadedFromStorage(true);
+      }
+    };
+    loadState();
+  }, []);
+
+  // Save tasks to storage whenever state updates
+  useEffect(() => {
+    if (!isLoadedFromStorage) return;
+    const saveState = async () => {
+      try {
+        await AsyncStorage.setItem(STORAGE_KEY_TASKS, JSON.stringify(tasks));
+        await AsyncStorage.setItem(STORAGE_KEY_REUSABLE, JSON.stringify(reusableTasks));
+      } catch (e) {
+        console.log('Failed to save to storage:', e);
+      }
+    };
+    saveState();
+  }, [tasks, reusableTasks, isLoadedFromStorage]);
 
   useEffect(() => {
     requestNotificationPermissions();
