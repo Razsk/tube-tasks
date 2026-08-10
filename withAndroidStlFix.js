@@ -1,18 +1,33 @@
-const { withProjectBuildGradle, withAppBuildGradle } = require('@expo/config-plugins');
+const { withProjectBuildGradle } = require('@expo/config-plugins');
 
 const withAndroidStlFix = (config) => {
-  config = withProjectBuildGradle(config, (config) => {
+  return withProjectBuildGradle(config, (config) => {
     if (!config.modResults.contents.includes('DANDROID_STL=c++_shared')) {
-      config.modResults.contents += `\n
+      const stlSnippet = `
+allprojects {
+  tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
+    options.compilerArgs << "-Xlint:unchecked"
+  }
+}
+
 subprojects {
-  afterEvaluate { subproject ->
-    if (subproject.plugins.hasPlugin('com.android.library') || subproject.plugins.hasPlugin('com.android.application')) {
-      subproject.android {
-        defaultConfig {
-          externalNativeBuild {
-            cmake {
-              arguments "-DANDROID_STL=c++_shared"
-            }
+  plugins.withId('com.android.library') {
+    android {
+      defaultConfig {
+        externalNativeBuild {
+          cmake {
+            arguments "-DANDROID_STL=c++_shared"
+          }
+        }
+      }
+    }
+  }
+  plugins.withId('com.android.application') {
+    android {
+      defaultConfig {
+        externalNativeBuild {
+          cmake {
+            arguments "-DANDROID_STL=c++_shared"
           }
         }
       }
@@ -20,26 +35,10 @@ subprojects {
   }
 }
 `;
+      config.modResults.contents += stlSnippet;
     }
     return config;
   });
-
-  config = withAppBuildGradle(config, (config) => {
-    if (!config.modResults.contents.includes('DANDROID_STL=c++_shared')) {
-      config.modResults.contents = config.modResults.contents.replace(
-        /defaultConfig\s*\{/,
-        `defaultConfig {
-        externalNativeBuild {
-            cmake {
-                arguments "-DANDROID_STL=c++_shared"
-            }
-        }`
-      );
-    }
-    return config;
-  });
-
-  return config;
 };
 
 module.exports = withAndroidStlFix;
