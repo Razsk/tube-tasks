@@ -26,6 +26,9 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "plugins": [
+      "./withAndroidStlFix.js"
+    ],
     "extra": {
       "eas": {
         "projectId": "a76463d2-fbfb-4fb2-b5e5-b6beb178149d"
